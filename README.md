@@ -1,1 +1,1 @@
-# dotnet-custom-calculator
+# dotnet-custom-console-calculator
