@@ -23,17 +23,12 @@ namespace Calculator.Analyzer.Tests
         [TestCase("mul 2 add 3.5 4", 15)]
         [TestCase("mul add 3 4 2", 14)]
         [TestCase("mul div 14 2 7", 49)]
+        [TestCase("add 4 mul div 14 2 7", 53)]
         public void CalculateResultFromCorrectInputString(string input, double expectedResult)
         {
             var options = Options.Create(new ExpressionAnalyzerOptions()
             {
-                AvailableOperations = new System.Collections.Generic.Dictionary<string, string>
-                {
-                    { "add", "Expression.Add" },
-                    { "sub", "Expression.Subtract" },
-                    { "mul", "Expression.Multiply" },
-                    { "div", "Expression.Divide" }
-                }
+                AvailableOperations = new string[] { "add", "sub", "mul", "div" }
             });
 
             var analyzer = new ExpressionAnalyzer(options);

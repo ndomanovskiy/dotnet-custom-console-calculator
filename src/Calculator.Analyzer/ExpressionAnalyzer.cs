@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 
 namespace Calculator.Analyzer
@@ -8,6 +11,7 @@ namespace Calculator.Analyzer
     public class ExpressionAnalyzer
     {
         private readonly IOptions<ExpressionAnalyzerOptions> _options;
+        private LinkedListNode<string> _expressionHead;
 
         public ExpressionAnalyzer(IOptions<ExpressionAnalyzerOptions> options)
         {
@@ -16,41 +20,55 @@ namespace Calculator.Analyzer
 
         public double? GetResultFromExpression(string input)
         {
-            var expressionParts = input.Split(' ');
+            var regex = new Regex(@"\s");
+            var expressionParts = regex.Split(input.ToLower());
 
             if (expressionParts.Length < 3)
                 return default;
 
             var linkedList = new LinkedList<string>(expressionParts);
 
-            return ApplyOperationAndGetResult(linkedList.First);
+            var head = linkedList.First;
+
+            if (!_options.Value.AvailableOperations.Contains(head.Value))
+                throw new InvalidOperationException($"Cant find funtion with name '{head}'.");
+
+            _expressionHead = head;
+
+            var expression = ApplyOperationAndGetResult();
+
+            return Expression.Lambda<Func<double>>(expression).Compile()();
         }
 
-        private double? GetValue(LinkedListNode<string> head)
+        private Expression GetValue()
         {
-            if (_options.Value.AvailableOperations.ContainsKey(head.Value))
+            _expressionHead = _expressionHead.Next;
+
+            if (_options.Value.AvailableOperations.Contains(_expressionHead.Value))
             {
-                return ApplyOperationAndGetResult(head);
+                return ApplyOperationAndGetResult();
             }
-            else if (double.TryParse(head.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
+            else if (double.TryParse(_expressionHead.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
             {
-                return result;
+                return Expression.Constant(result);
             }
-            else throw new InvalidOperationException($"Input word '{head.Value}' is not operation or digit.");
+            else throw new InvalidOperationException($"Input word '{_expressionHead.Value}' is not operation or digit.");
         }
 
-        private double? ApplyOperationAndGetResult(LinkedListNode<string> head)
+        private BinaryExpression ApplyOperationAndGetResult()
         {
-            var left = GetValue(head.Next);
-            var right = GetValue(head.Next.Next);
+            var operation = _expressionHead.Value;
 
-            return head.Value switch
+            var left = GetValue();
+            var right = GetValue();
+
+            return operation switch
             {
-                "add" => left + right,
-                "sub" => left - right,
-                "mul" => left * right,
-                "div" => left / right,
-                _ => throw new InvalidOperationException($"Cant find funtion with name '{head.Value}'."),
+                "add" => Expression.Add(left, right),
+                "sub" => Expression.Subtract(left, right),
+                "mul" => Expression.Multiply(left, right),
+                "div" => Expression.Divide(left, right),
+                _ => throw new InvalidOperationException($"Cant find funtion with name '{_expressionHead.Value}'."),
             };
         }
     }

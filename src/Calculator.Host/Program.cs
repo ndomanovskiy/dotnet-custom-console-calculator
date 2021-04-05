@@ -9,45 +9,43 @@ namespace Calculator.Host
 {
     public class Program
     {
-        private static IHost? _host;
-        private static IConfiguration? _configuration;
-        private static Lazy<IServiceProvider>? _serviceProvider;
-
         public static async Task Main(string[] args)
         {
-            AppDomain.CurrentDomain.ProcessExit += new EventHandler(CurrentDomain_ProcessExit);
+            var isBreak = false;
 
-            _serviceProvider = new Lazy<IServiceProvider>(() => _host!.Services);
-            _host = CreateHostBuilder(args).Build();
+            Console.CancelKeyPress += (sender, e) => isBreak = true;
 
-            await _host.StartAsync();
+            using var host = CreateHostBuilder(args).Build();
+
+            await host.StartAsync();
 
             var helpMessage =
                 "Wrong input."
                 + Environment.NewLine + "Expected format for input is string with format 'functionName param1 param2'."
                 + Environment.NewLine + "For example: 'add 3 4' or 'mult 2 add 3 4'.";
 
-            while (true)
+            using var servicesScope = host.Services.CreateScope();
+
+            while (!isBreak)
             {
                 var input = Console.ReadLine();
 
+                if (input == "exit" || isBreak)
+                    break;
+
                 if (input is not null)
                 {
-                    var analyzer = _serviceProvider!.Value.GetRequiredService<ExpressionAnalyzer>();
+                    var analyzer = servicesScope.ServiceProvider.GetRequiredService<ExpressionAnalyzer>();
 
                     var result = analyzer.GetResultFromExpression(input);
 
                     if (result is not null)
-                        Console.WriteLine($"Result: {result}.");
+                        Console.WriteLine(result.HasValue ? $"Result: {result}." : helpMessage);
                 }
-
-                Console.WriteLine(helpMessage);
+                else Console.WriteLine(helpMessage);
             }
-        }
 
-        static void CurrentDomain_ProcessExit(object? sender, EventArgs? e)
-        {
-            _host?.StopAsync().Wait();
+            await host.StopAsync();
         }
 
         public static IHostBuilder CreateHostBuilder(string[] args) =>
@@ -59,13 +57,11 @@ namespace Calculator.Host
                 configuration
                     .AddJsonFile("appsettings.json")
                     .AddJsonFile($"appsettings.{hostContext.HostingEnvironment.EnvironmentName}.json", true);
-
-                _configuration = configuration.Build();
             })
             .ConfigureServices((hostContext, services) =>
             {
                 services.Configure<ExpressionAnalyzerOptions>(
-                     _configuration!.GetSection(nameof(ExpressionAnalyzerOptions)));
+                     hostContext.Configuration.GetSection(nameof(ExpressionAnalyzerOptions)));
 
                 services.AddTransient<ExpressionAnalyzer>();
             });
